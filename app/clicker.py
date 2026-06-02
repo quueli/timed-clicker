@@ -1,4 +1,4 @@
-"""Win32 SendInput click - no background hooks."""
+"""Win32 SendInput click, no background hooks."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ import ctypes
 import sys
 from ctypes import wintypes
 from typing import Callable
+
+from PySide6.QtGui import QGuiApplication
 
 INPUT_MOUSE = 0
 MOUSEEVENTF_LEFTDOWN = 0x0002
@@ -51,12 +53,29 @@ class Clicker:
     def reset_for_test(self) -> None:
         self._clicked = False
 
+    def get_virtual_desktop_bounds(self) -> tuple[int, int, int, int]:
+        screens = QGuiApplication.screens()
+        if not screens:
+            return (0, 0, 0, 0)
+
+        left = min(s.geometry().left() for s in screens)
+        top = min(s.geometry().top() for s in screens)
+        right = max(s.geometry().right() for s in screens)
+        bottom = max(s.geometry().bottom() for s in screens)
+        return (left, top, right, bottom)
+
     def validate_coordinates(self, x: int, y: int) -> bool:
-        return x >= 0 and y >= 0
+        left, top, right, bottom = self.get_virtual_desktop_bounds()
+        if right <= left or bottom <= top:
+            return x >= 0 and y >= 0
+        return left <= x <= right and top <= y <= bottom
 
     def click_once(self, x: int, y: int) -> None:
+        if self._clicked:
+            raise ClickError("Click already performed in this session")
+
         if not self.validate_coordinates(x, y):
-            raise ClickError(f"Coordinates ({x}, {y}) look invalid")
+            raise ClickError(f"Coordinates ({x}, {y}) are outside the screen bounds")
 
         if self._test_mode:
             self._clicked = True
