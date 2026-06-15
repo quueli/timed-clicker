@@ -1,4 +1,4 @@
-"""Countdown scheduler with a worker thread."""
+"""Countdown scheduler with precise final-phase worker thread."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from typing import Callable
 from PySide6.QtCore import QObject, QTimer, Signal
 
 MAX_WAIT_SECONDS = 25 * 3600
+FINAL_BUSY_WAIT_SECONDS = 0.5
+THREAD_JOIN_TIMEOUT = 2.0
 
 
 class Scheduler(QObject):
@@ -63,7 +65,7 @@ class Scheduler(QObject):
         self._stop_event.set()
         self._ui_timer.stop()
         if self._worker and self._worker.is_alive():
-            self._worker.join(timeout=2.0)
+            self._worker.join(timeout=THREAD_JOIN_TIMEOUT)
         self._worker = None
 
     def remaining_seconds(self) -> float:
@@ -81,11 +83,33 @@ class Scheduler(QObject):
         tz = self._target.tzinfo
 
         try:
-            remaining = (self._target - datetime.now(tz)).total_seconds()
-            if self._stop_event.wait(timeout=max(0.0, remaining)):
+            while not self._stop_event.is_set():
+                remaining = (self._target - datetime.now(tz)).total_seconds()
+                if remaining <= FINAL_BUSY_WAIT_SECONDS:
+                    break
+                if remaining > 1.0:
+                    if self._stop_event.wait(timeout=min(remaining - FINAL_BUSY_WAIT_SECONDS, 1.0)):
+                        return
+                else:
+                    if self._stop_event.wait(timeout=remaining - FINAL_BUSY_WAIT_SECONDS):
+                        return
+
+            deadline = time.perf_counter() + FINAL_BUSY_WAIT_SECONDS
+            while not self._stop_event.is_set():
+                if datetime.now(tz) >= self._target:
+                    break
+                if time.perf_counter() >= deadline:
+                    break
+                time.sleep(0.001)
+
+            if self._stop_event.is_set():
                 return
-            while datetime.now(tz) < self._target:
-                time.sleep(0.01)
+
+            while datetime.now(tz) < self._target and not self._stop_event.is_set():
+                time.sleep(0.0005)
+
+            if self._stop_event.is_set():
+                return
 
             self.triggered.emit()
             self._click_fn()
