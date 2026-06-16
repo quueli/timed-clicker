@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QCursor, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+
+IDLE_TIMEOUT_MS = 60_000
 
 
 class PointPickerOverlay(QWidget):
@@ -37,6 +39,11 @@ class PointPickerOverlay(QWidget):
         layout.addWidget(self._hint, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         layout.setContentsMargins(20, 20, 20, 20)
 
+        self._idle_timer = QTimer(self)
+        self._idle_timer.setSingleShot(True)
+        self._idle_timer.timeout.connect(self._on_idle_timeout)
+        self._destroyed = False
+
     def show_on_all_screens(self) -> None:
         virtual = QGuiApplication.primaryScreen().virtualGeometry()
         self.setGeometry(virtual)
@@ -44,6 +51,7 @@ class PointPickerOverlay(QWidget):
         self.raise_()
         self.activateWindow()
         self.setFocus()
+        self._idle_timer.start(IDLE_TIMEOUT_MS)
 
     def paintEvent(self, event) -> None:  # noqa: N802
         painter = QPainter(self)
@@ -66,7 +74,14 @@ class PointPickerOverlay(QWidget):
             return
         super().mousePressEvent(event)
 
+    def _on_idle_timeout(self) -> None:
+        self._finish(cancel=True)
+
     def _finish(self, cancel: bool, x: int = 0, y: int = 0) -> None:
+        if self._destroyed:
+            return
+        self._destroyed = True
+        self._idle_timer.stop()
         self.hide()
         if cancel:
             self.cancelled.emit()
@@ -76,4 +91,5 @@ class PointPickerOverlay(QWidget):
         self.deleteLater()
 
     def destroy_overlay(self) -> None:
-        self._finish(cancel=True)
+        if not self._destroyed:
+            self._finish(cancel=True)
