@@ -40,6 +40,7 @@ class LoggingService(QObject):
         if not self._closed:
             self._file.write(line + "\n")
             self._file.flush()
+            os.fsync(self._file.fileno())
 
     def info(self, message: str) -> None:
         self._write("INFO", message)
@@ -56,5 +57,6 @@ class LoggingService(QObject):
             return
         self.info("Log flushed to disk before shutdown")
         self._file.flush()
+        os.fsync(self._file.fileno())
         self._file.close()
         self._closed = True
