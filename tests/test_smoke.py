@@ -1,16 +1,15 @@
 """Smoke tests with offscreen Qt platform."""
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from app.clicker import Clicker
 from app.main_window import MainWindow
 from app.scheduler import Scheduler
 from app.time_logic import get_timezone, now_in_tz
@@ -56,9 +55,27 @@ def test_main_window_test_mode_auto_exit(qapp, qtbot, tmp_path, monkeypatch):
     with qtbot.waitSignal(window._scheduler.finished, timeout=10000):
         pass
 
-    qtbot.wait(2000)
+    qtbot.wait(EXIT_DELAY_MS + 500)
     assert window._clicker.clicked
     assert log_path.exists()
     content = log_path.read_text(encoding="utf-8")
     assert "Application started" in content
     assert "Click performed successfully" in content
+
+
+EXIT_DELAY_MS = 1500
+
+
+def test_cli_test_mode_exits(qapp):
+    """Run main.py --test-mode --auto-start=1 as a subprocess."""
+    env = os.environ.copy()
+    env["QT_QPA_PLATFORM"] = "offscreen"
+    result = subprocess.run(
+        [sys.executable, str(PROJECT_ROOT / "main.py"), "--test-mode", "--auto-start=1"],
+        cwd=str(PROJECT_ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
