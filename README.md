@@ -1,5 +1,6 @@
 # timed-clicker
 
-windows tool: pick a point on screen, type a time, it clicks that point at that time and exits.
+windows tool: pick a point on screen, type a time, it clicks that point at that time and exits. made for a friend who needed to be first in a queue that opened at 10:00:00 sharp.
 
-wip
+    pip install -r requirements.txt
+    python main.py
